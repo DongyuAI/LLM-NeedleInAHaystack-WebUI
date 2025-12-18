@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Needle In A Haystack 面板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200">
+    <div id="app" class="p-6">
+        {% raw %}
+        <header class="mb-6 flex justify-between items-center border-b border-slate-700 pb-4">
+            <h1 class="text-2xl font-black text-white tracking-tighter">NANBEIGE TESTER <span class="text-blue-500">v1.0</span></h1>
+            <div class="flex gap-4">
+                <button @click="runTest" :disabled="isRunning" class="bg-green-600 hover:bg-green-500 px-6 py-2 rounded font-bold disabled:opacity-50">运行测试</button>
+                <button @click="runAnalyze" :disabled="isRunning" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold disabled:opacity-50">分析数据</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-12 gap-6">
+            <!-- 配置列 -->
+            <div class="col-span-12 md:col-span-4 space-y-4">
+                <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">API & Model</h2>
+                    <div class="space-y-3">
+                        <input v-model="config.api_url" placeholder="API URL" class="w-full bg-slate-900 border border-slate-700 p-2 rounded text-sm">
+                        <input v-model="config.api_key" placeholder="API KEY" type="password" class="w-full bg-slate-900 border border-slate-700 p-2 rounded text-sm">
+                        <input v-model="config.model_id" placeholder="Model ID" class="w-full bg-slate-900 border border-slate-700 p-2 rounded text-sm font-mono text-blue-400">
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">Parameters</h2>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="text-xs">Temp</label><input v-model.number="config.temperature" step="0.1" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                        <div><label class="text-xs">Top_P</label><input v-model.number="config.top_p" step="0.1" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                        <div><label class="text-xs">Freq Penalty</label><input v-model.number="config.frequency_penalty" step="0.1" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                        <div><label class="text-xs">Pres Penalty</label><input v-model.number="config.presence_penalty" step="0.1" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                        <div class="col-span-2"><label class="text-xs">Max Tokens</label><input v-model.number="config.max_tokens" class="w-full bg-slate-900 border border-slate-700 p-1 rounded font-mono"></div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">Task</h2>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="text-xs">次数</label><input v-model.number="config.total_requests" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                        <div><label class="text-xs">并发</label><input v-model.number="config.max_concurrent" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                        <div class="col-span-2"><label class="text-xs">长度 (Byte)</label><input v-model.number="config.context_length" class="w-full bg-slate-900 border border-slate-700 p-1 rounded"></div>
+                    </div>
+                    <button @click="saveConfig" class="w-full mt-4 border border-blue-500 text-blue-500 py-2 rounded hover:bg-blue-500 hover:text-white transition">保存配置</button>
+                </div>
+            </div>
+
+            <!-- 日志列 -->
+            <div class="col-span-12 md:col-span-8 bg-black rounded-lg border border-slate-700 overflow-hidden flex flex-col h-[600px]">
+                <div class="bg-slate-800 px-4 py-2 text-xs font-mono flex justify-between">
+                    <span>TERMINAL OUTPUT</span>
+                    <span :class="isRunning ? 'text-green-500' : 'text-slate-500'">● {{ isRunning ? 'RUNNING' : 'IDLE' }}</span>
+                </div>
+                <div id="logs" class="p-4 font-mono text-xs text-green-500 overflow-y-auto flex-grow">
+                    <div v-for="log in logs" class="mb-1">> {{ log }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果图 -->
+        <div class="mt-8">
+            <h2 class="text-xl font-bold mb-4">分析结果热力图</h2>
+            <div v-if="images.length === 0" class="p-12 border-2 border-dashed border-slate-700 rounded-lg text-center text-slate-500">完成分析后在此显示图表</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div v-for="img in images" class="bg-slate-800 p-2 rounded border border-slate-700">
+                    <img :src="'/results/' + img + '?t=' + Date.now()" class="w-full rounded">
+                    <p class="text-center text-xs mt-2 text-slate-400 font-mono">{{ img }}</p>
+                </div>
+            </div>
+        </div>
+        {% endraw %}
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            data() { return { config: {}, logs: [], images: [], isRunning: false }},
+            mounted() {
+                this.fetchConfig();
+                this.fetchImages();
+                setInterval(this.pollLogs, 1000);
+            },
+            methods: {
+                async fetchConfig() { const r = await fetch('/api/config'); this.config = await r.json(); },
+                async saveConfig() { await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(this.config)}); alert('保存成功'); },
+                async runTest() { this.logs = []; await fetch('/api/run_test', {method:'POST'}); },
+                async runAnalyze() { await fetch('/api/analyze', {method:'POST'}); },
+                async fetchImages() { const r = await fetch('/api/images'); this.images = await r.json(); },
+                async pollLogs() {
+                    const r = await fetch('/api/logs');
+                    const d = await r.json();
+                    this.logs = d.logs;
+                    this.isRunning = d.is_running;
+                    const el = document.getElementById('logs');
+                    if(el) el.scrollTop = el.scrollHeight;
+                    if(!this.isRunning && this.logs.length > 0 && this.logs[this.logs.length-1].includes("分析完成")) this.fetchImages();
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

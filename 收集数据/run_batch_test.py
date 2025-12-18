@@ -10,10 +10,20 @@ import sys
 # 获取脚本所在目录
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 配置参数
-API_URL = "https://127.0.0.1/v1/chat/completions"
-MODEL_ID = "gemini-3-pro-preview"      # 模型ID（用于数据库文件名）
-API_MODEL = "gemini-3-pro-preview"     # 发送给API的模型名称
+# --- 修改：从环境变量读取配置 ---
+API_URL = os.getenv("API_URL", "http://localhost:7101/v1/chat/completions")
+# MODEL_ID 决定数据库名
+MODEL_ID = os.getenv("MODEL_ID", "Nanbeige4-3B")
+# API_MODEL 决定发送给接口的 model 字段
+API_MODEL = os.getenv("MODEL_ID", "Nanbeige4-3B")
+api_key = os.getenv("API_KEY", "sk-no-key")
+
+# 超参数
+LLM_TEMP = float(os.getenv("LLM_TEMP", 0.9))
+LLM_TOP_P = float(os.getenv("LLM_TOP_P", 1.0))
+LLM_FREQ_P = float(os.getenv("LLM_FREQ_P", 0.5))
+LLM_PRES_P = float(os.getenv("LLM_PRES_P", 0.5))
+LLM_MAX_T = int(os.getenv("LLM_MAX_T", 32000))
 
 # 默认生成参数
 DEFAULT_TARGET_LENGTH = 40200  # 目标文本长度（字节）- 仅在不使用文本文件时有效
@@ -25,7 +35,9 @@ DEFAULT_RANDOM_OFFSET_RATIO = None  # 插针位置随机偏移比例（None=不�
 # 文本文件配置（优先级高于生成模式）
 # 如果设置了文本文件路径，将使用文件内容而不是生成文本
 # 设置为None则使用DEFAULT_BASE_PATTERN生成文本
-DEFAULT_TEXT_FILE = os.path.join(SCRIPT_DIR, "小说/500000.txt")  
+# DEFAULT_TEXT_FILE = os.path.join(SCRIPT_DIR, "小说/500000.txt")
+DEFAULT_TEXT_FILE = None
+
 # 默认文本文件路径（相对于脚本目录）
 # DEFAULT_TEXT_FILE = None  # 设置为None则使用base_pattern生成文本
 
@@ -49,7 +61,7 @@ DEFAULT_MAX_CONCURRENT = 10  # 默认最大并发数
 HEADERS = {
     'accept': 'application/json',
     'accept-language': 'zh-CN',
-    'authorization': 'Bearer sk-123',
+    'authorization': f'Bearer {api_key}', # 动态读取环境变量
     'content-type': 'application/json',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.5.11 Chrome/138.0.7204.243 Electron/37.4.0 Safari/537.36',
 }
@@ -500,29 +512,27 @@ def generate_test_case(target_length, num_insertions, base_pattern=DEFAULT_BASE_
 
 async def make_api_request(session, request_id, semaphore, db_manager,
                           target_length, num_insertions, base_pattern, needle_range, text_file, random_offset_ratio, stats):
-    """
-    发送单个API请求（每次生成独立的测试用例）
-    """
     async with semaphore:
-        print(f"→ 请求 #{request_id}: 开始发送...")
-
         prompt_content, standard_answers_json, byte_count, actual_num_insertions = generate_test_case(
             target_length, num_insertions, base_pattern, needle_range, text_file, random_offset_ratio
         )
-
         db_manager.create_table_if_not_exists(byte_count, text_file)
 
+        # 修改 Payload 以包含所有参数
         payload = {
             "model": API_MODEL,
-            "messages": [
-                {"role": "user", "content": prompt_content}
-            ],
+            "messages": [{"role": "user", "content": prompt_content}],
+            "temperature": LLM_TEMP,
+            "top_p": LLM_TOP_P,
+            "frequency_penalty": LLM_FREQ_P,
+            "presence_penalty": LLM_PRES_P,
+            "max_tokens": LLM_MAX_T,
             "stream": True
         }
 
         try:
             start_time = time.time()
-            async with session.post(API_URL, headers=HEADERS, json=payload, timeout=900) as response:
+            async with session.post(API_URL, headers=HEADERS, json=payload, timeout=1800) as response:
                 if response.status == 200:
                     content = ""
                     
